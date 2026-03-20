@@ -9,6 +9,7 @@ public interface IFileService
         Stream stream,
         string originalFileName,
         string contentType,
+        Guid ownerId,
         FileVisibility visibility = FileVisibility.Private,
         CancellationToken cancellationToken = default);
 
@@ -18,6 +19,7 @@ public interface IFileService
 
     Task<Stream> DownloadAsync(
         Guid fileId,
+        Guid userId,
         CancellationToken cancellationToken = default);
 
     Task DeleteAsync(

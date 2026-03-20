@@ -13,6 +13,7 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
         Stream stream, 
         string originalFileName, 
         string contentType, 
+        Guid ownerId,
         FileVisibility visibility = FileVisibility.Private, 
         CancellationToken cancellationToken = default)
     {
@@ -29,7 +30,7 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
 
         var metadata = new FileMetadata
         {
-            Id = Guid.NewGuid(),
+            UserId = ownerId,
             OriginalFileName = originalFileName,
             Extension = extension,
             ContentType = contentType,
@@ -66,7 +67,7 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
     public async Task<FileMetadata?> GetMetadataAsync(Guid fileId, CancellationToken cancellationToken = default) => 
         await dbContext.FilesMetadata.FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
 
-    public async Task<Stream> DownloadAsync(Guid fileId, CancellationToken cancellationToken = default)
+    public async Task<Stream> DownloadAsync(Guid fileId, Guid userId, CancellationToken cancellationToken = default)
     {
         var metadata = await dbContext.FilesMetadata
             .FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
@@ -76,11 +77,14 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
 
         if (metadata.Status != FileStatus.Ready)
             throw new InvalidOperationException($"File '{fileId}' is not ready for download.");
+        
+        if (metadata.UserId != userId && metadata.Visibility == FileVisibility.Private)
+            throw new UnauthorizedAccessException();
 
         return await objectStorage.GetAsync(metadata.BucketName, metadata.ObjectKey, cancellationToken);
     }
 
-    public async Task DeleteAsync(Guid fileId, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Guid fileId, Guid userId, CancellationToken cancellationToken = default)
     {
         var metadata = await dbContext.FilesMetadata
             .FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
@@ -90,6 +94,9 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
 
         if (metadata.Status == FileStatus.Deleted)
             return;
+        
+        if (metadata.UserId != userId)
+            throw new UnauthorizedAccessException();
 
         try
         {
