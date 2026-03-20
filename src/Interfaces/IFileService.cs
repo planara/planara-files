@@ -24,6 +24,7 @@ public interface IFileService
 
     Task DeleteAsync(
         Guid fileId,
+        Guid userId,
         CancellationToken cancellationToken = default);
 
     Task<FileMetadata> SetVisibilityAsync(
