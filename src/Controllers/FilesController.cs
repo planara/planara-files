@@ -1,5 +1,4 @@
-using System.Security.Claims;
-using HotChocolate.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Planara.Common.Auth.Claims;
 using Planara.Files.Interfaces;
@@ -8,17 +7,20 @@ namespace Planara.Files.Controllers;
 
 [ApiController]
 [Route("api/files")]
-public sealed class FilesController(IFileService fileService) : ControllerBase
+public class FilesController(IFileService fileService) : ControllerBase
 {
     [Authorize]
     [HttpPost("upload")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(1024 * 1024 * 100)]
-    public async Task<IActionResult> Upload(IFormFile file, ClaimsPrincipal claims, CancellationToken cancellationToken)
+    public async Task<IActionResult> Upload(
+        IFormFile file,
+        CancellationToken cancellationToken)
     {
         if (file.Length == 0)
             return BadRequest("File is empty.");
 
-        var userId = claims.GetUserId();
+        var userId = User.GetUserId();
 
         await using var stream = file.OpenReadStream();
 
@@ -44,14 +46,14 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
 
     [Authorize]
     [HttpGet("{id:guid}/download")]
-    public async Task<IActionResult> Download(Guid id, ClaimsPrincipal claims, CancellationToken cancellationToken)
+    public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
     {
         var metadata = await fileService.GetMetadataAsync(id, cancellationToken);
         
         if (metadata is null)
             return NotFound();
         
-        var userId = claims.GetUserId();
+        var userId = User.GetUserId();
 
         var stream = await fileService.DownloadAsync(id, userId, cancellationToken);
 
@@ -60,9 +62,9 @@ public sealed class FilesController(IFileService fileService) : ControllerBase
 
     [Authorize]
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, ClaimsPrincipal claims, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var userId = claims.GetUserId();
+        var userId = User.GetUserId();
         
         await fileService.DeleteAsync(id, userId, cancellationToken);
         return NoContent();
