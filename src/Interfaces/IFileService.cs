@@ -31,4 +31,12 @@ public interface IFileService
         Guid fileId,
         FileVisibility visibility,
         CancellationToken cancellationToken = default);
+    
+    Task<FileMetadata> UpdateAsync(
+        Guid fileId,
+        Stream stream,
+        string originalFileName,
+        string contentType,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

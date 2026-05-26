@@ -7,7 +7,11 @@ using Planara.Files.Interfaces;
 
 namespace Planara.Files.Services;
 
-public class FileService(DataContext dbContext, IObjectStorage objectStorage, string defaultBucket = "files") : IFileService
+public class FileService(
+    DataContext dbContext, 
+    IObjectStorage objectStorage, 
+    ILogger<FileService> logger, 
+    string defaultBucket = "files") : IFileService
 {
     public async Task<FileMetadata> UploadAsync(
         Stream stream, 
@@ -119,6 +123,93 @@ public class FileService(DataContext dbContext, IObjectStorage objectStorage, st
 
         metadata.Visibility = visibility;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        return metadata;
+    }
+    
+    public async Task<FileMetadata> UpdateAsync(
+        Guid fileId,
+        Stream stream,
+        string originalFileName,
+        string contentType,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+
+        if (string.IsNullOrWhiteSpace(originalFileName))
+            throw new ArgumentException("File name is required", nameof(originalFileName));
+
+        if (string.IsNullOrWhiteSpace(contentType))
+            contentType = "application/octet-stream";
+
+        var metadata = await dbContext.FilesMetadata
+            .FirstOrDefaultAsync(x => x.Id == fileId, cancellationToken);
+
+        if (metadata is null)
+            throw new NotFoundException();
+
+        if (metadata.Status == FileStatus.Deleted)
+            throw new NotFoundException();
+
+        if (metadata.UserId != userId)
+            throw new UnauthorizedAccessException();
+
+        var oldBucket = metadata.BucketName;
+        var oldObjectKey = metadata.ObjectKey;
+
+        var extension = Path.GetExtension(originalFileName);
+        var newObjectKey = GenerateObjectKey(extension);
+        var newSize = GetStreamLengthSafe(stream);
+
+        try
+        {
+            if (stream.CanSeek)
+                stream.Position = 0;
+
+            await objectStorage.UploadAsync(
+                defaultBucket,
+                newObjectKey,
+                stream,
+                contentType,
+                cancellationToken);
+
+            metadata.OriginalFileName = originalFileName;
+            metadata.Extension = extension;
+            metadata.ContentType = contentType;
+            metadata.Size = newSize;
+            metadata.BucketName = defaultBucket;
+            metadata.ObjectKey = newObjectKey;
+            metadata.Status = FileStatus.Ready;
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            try
+            {
+                await objectStorage.DeleteAsync(defaultBucket, newObjectKey, cancellationToken);
+            }
+            catch
+            {
+                // Сервис по прежнему ссылается на старый файл
+                // TODO: фоновая задача для очистки нового файла
+                logger.LogWarning("Failed to delete file {FileId} from {Bucket} with key {ObjectKey}", fileId, defaultBucket, newObjectKey);
+            }
+
+            throw;
+        }
+
+        try
+        {
+            await objectStorage.DeleteAsync(oldBucket, oldObjectKey, cancellationToken);
+        }
+        catch
+        {
+            // Новый файл уже сохранён и metadata уже обновлена
+            // TODO: фоновая задача для очистки старого файла
+            logger.LogWarning("Failed to delete file {FileId} from {Bucket} with key {ObjectKey}", fileId, oldBucket, oldObjectKey);
+        }
 
         return metadata;
     }

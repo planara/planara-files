@@ -20,6 +20,9 @@ public class FilesController(IFileService fileService) : ControllerBase
         if (file.Length == 0)
             return BadRequest("File is empty.");
 
+        if (!IsAllowedFile(file))
+            return BadRequest("Unsupported file type. Allowed types: png, jpeg, webp, obj.");
+
         var userId = User.GetUserId();
 
         await using var stream = file.OpenReadStream();
@@ -68,5 +71,88 @@ public class FilesController(IFileService fileService) : ControllerBase
         
         await fileService.DeleteAsync(id, userId, cancellationToken);
         return NoContent();
+    }
+    
+    [Authorize]
+    [HttpPut("{id:guid}")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(1024 * 1024 * 100)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromForm] IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file.Length == 0)
+            return BadRequest("File is empty.");
+
+        if (!IsAllowedFile(file))
+            return BadRequest("Unsupported file type. Allowed types: png, jpeg, webp, obj.");
+
+        var userId = User.GetUserId();
+
+        await using var stream = file.OpenReadStream();
+
+        var metadata = await fileService.UpdateAsync(
+            id,
+            stream,
+            file.FileName,
+            string.IsNullOrWhiteSpace(file.ContentType)
+                ? "application/octet-stream"
+                : file.ContentType,
+            userId,
+            cancellationToken);
+
+        return Ok(new
+        {
+            metadata.Id,
+            metadata.OriginalFileName,
+            metadata.ContentType,
+            metadata.Size,
+            metadata.Visibility,
+            metadata.Status
+        });
+    }
+    
+    private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".obj"
+    };
+
+    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        
+        "model/obj",
+        "application/octet-stream",
+        "text/plain"
+    };
+
+    private static bool IsAllowedFile(IFormFile file)
+    {
+        var extension = Path.GetExtension(file.FileName);
+
+        if (string.IsNullOrWhiteSpace(extension))
+            return false;
+
+        if (!AllowedExtensions.Contains(extension))
+            return false;
+
+        if (string.IsNullOrWhiteSpace(file.ContentType))
+            return extension.Equals(".obj", StringComparison.OrdinalIgnoreCase);
+
+        if (extension.Equals(".obj", StringComparison.OrdinalIgnoreCase))
+        {
+            return file.ContentType.Equals("model/obj", StringComparison.OrdinalIgnoreCase)
+                   || file.ContentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)
+                   || file.ContentType.Equals("text/plain", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return AllowedContentTypes.Contains(file.ContentType);
     }
 }
