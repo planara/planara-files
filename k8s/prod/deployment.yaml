@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-files
+  namespace: planara
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: svc-files
+  template:
+    metadata:
+      labels:
+        app: svc-files
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+
+      containers:
+        - name: svc-files
+          image: ghcr.io/planara/planara-files:latest
+          args:
+            - --migrate
+
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+
+            - name: PGDATABASE
+              value: "files"
+
+            - name: DbConnections__Postgres__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: planara-common-secrets
+                  key: DbConnections__Postgres__ConnectionString
+
+            - name: Jwt__Issuer
+              value: "planara-auth"
+
+            - name: Jwt__Audience
+              value: "planara"
+
+            - name: Jwt__SigningKey
+              valueFrom:
+                secretKeyRef:
+                  name: planara-common-secrets
+                  key: Jwt__SigningKey
+
+            - name: Jwt__AccessTokenMinutes
+              value: "15"
+
+            - name: Minio__Endpoint
+              value: "minio:9000"
+
+            - name: Minio__AccessKey
+              valueFrom:
+                secretKeyRef:
+                  name: planara-common-secrets
+                  key: MINIO_ROOT_USER
+
+            - name: Minio__SecretKey
+              valueFrom:
+                secretKeyRef:
+                  name: planara-common-secrets
+                  key: MINIO_ROOT_PASSWORD
+
+            - name: Minio__UseSsl
+              value: "false"
+
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 12
+
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 6

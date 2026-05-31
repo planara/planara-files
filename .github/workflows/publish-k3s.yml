@@ -1,0 +1,115 @@
+name: publish-k3s
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: svc-files-prod
+  cancel-in-progress: false
+
+jobs:
+  publish-files-api:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags
+
+      - name: Set deploy variables
+        id: vars
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          MAIN_SHA="$(git rev-parse HEAD)"
+          MAIN_SHORT_SHA="${MAIN_SHA::7}"
+
+          LATEST_TAG="$(git tag --list 'v*' --sort=-v:refname | head -n 1)"
+          LATEST_VERSION="${LATEST_TAG#v}"
+
+          echo "image=ghcr.io/${OWNER_LC}/planara-files" >> $GITHUB_OUTPUT
+          echo "main_sha=$MAIN_SHA" >> $GITHUB_OUTPUT
+          echo "main_short_sha=$MAIN_SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag
+        id: image
+        run: |
+          IMAGE="${{ steps.vars.outputs.image }}"
+          MAIN_SHA="${{ steps.vars.outputs.main_sha }}"
+          LATEST_VERSION="${{ steps.vars.outputs.latest_version }}"
+
+          echo "Trying main image: ${IMAGE}:${MAIN_SHA}"
+
+          if docker buildx imagetools inspect "${IMAGE}:${MAIN_SHA}" > /dev/null 2>&1; then
+            echo "Resolved image tag: ${MAIN_SHA}"
+            echo "tag=${MAIN_SHA}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if [ -z "$LATEST_VERSION" ]; then
+            echo "No image for main sha and no v* tag found."
+            exit 1
+          fi
+
+          echo "Main image not found. Trying latest release image: ${IMAGE}:${LATEST_VERSION}"
+
+          if docker buildx imagetools inspect "${IMAGE}:${LATEST_VERSION}" > /dev/null 2>&1; then
+            echo "Resolved image tag: ${LATEST_VERSION}"
+            echo "tag=${LATEST_VERSION}" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Neither ${IMAGE}:${MAIN_SHA} nor ${IMAGE}:${LATEST_VERSION} exists."
+          exit 1
+
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/planara_vps
+          chmod 600 ~/.ssh/planara_vps
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Upload manifests
+        run: |
+          ssh -i ~/.ssh/planara_vps ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "mkdir -p ~/planara-deploy/svc-files/k8s/prod"
+
+          scp -i ~/.ssh/planara_vps -r k8s/prod/* \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:~/planara-deploy/svc-files/k8s/prod/
+
+      - name: Apply manifests
+        run: |
+          ssh -i ~/.ssh/planara_vps ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "sudo k3s kubectl apply -f ~/planara-deploy/svc-files/k8s/prod"
+
+      - name: Set image
+        run: |
+          ssh -i ~/.ssh/planara_vps ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "sudo k3s kubectl -n planara set image deployment/svc-files svc-files=${{ steps.vars.outputs.image }}:${{ steps.image.outputs.tag }}"
+
+      - name: Wait rollout
+        run: |
+          ssh -i ~/.ssh/planara_vps ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "sudo k3s kubectl -n planara rollout status deployment/svc-files --timeout=180s"
+
+      - name: Show status
+        run: |
+          ssh -i ~/.ssh/planara_vps ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "sudo k3s kubectl -n planara get pods && sudo k3s kubectl -n planara get svc svc-files"
