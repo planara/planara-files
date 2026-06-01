@@ -24,8 +24,7 @@ public class ApiTestWebAppFactory : WebApplicationFactory<Program>, IAsyncLifeti
         .WithPassword("postgres")
         .Build();
 
-    private readonly IContainer _minio = new ContainerBuilder()
-        .WithImage("minio/minio:latest")
+    private readonly IContainer _minio = new ContainerBuilder("minio/minio:latest")
         .WithPortBinding(9000, true)
         .WithEnvironment("MINIO_ROOT_USER", MinioAccessKey)
         .WithEnvironment("MINIO_ROOT_PASSWORD", MinioSecretKey)
