@@ -7,7 +7,7 @@ on:
 
 env:
   IMAGE_NAME: planara-files
-  DOCKER_CONTEXT: ./src
+  BUILD_CONTEXT: ./src
   DOCKERFILE: ./src/Dockerfile
 
 jobs:
@@ -86,7 +86,7 @@ jobs:
         if: steps.bump.outputs.value != 'false'
         uses: docker/build-push-action@v6
         with:
-          context: ${{ env.DOCKER_CONTEXT }}
+          context: ${{ env.BUILD_CONTEXT }}
           file: ${{ env.DOCKERFILE }}
           push: true
           platforms: linux/amd64,linux/arm64
