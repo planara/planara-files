@@ -3,6 +3,8 @@
 ![publish-k3s](https://github.com/planara/planara-files/actions/workflows/publish-k3s.yml/badge.svg)
 ![version](https://img.shields.io/github/v/tag/planara/planara-files?sort=semver)
 [![Codecov](https://codecov.io/gh/planara/planara-files/branch/main/graph/badge.svg)](https://codecov.io/gh/planara/planara-files)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
 
 ## Planara.Files
 

@@ -6,11 +6,14 @@ using Planara.Common.Auth.Jwt;
 using Planara.Common.Configuration;
 using Planara.Common.Database;
 using Planara.Common.Host;
+using Planara.Common.Kafka;
 using Planara.Common.Validators;
 using Planara.Files.Data;
 using Planara.Files.Interfaces;
 using Planara.Files.Options;
 using Planara.Files.Services;
+using Planara.Files.Workers;
+using Planara.Kafka.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,6 +57,9 @@ builder.Services.AddDataContext<DataContext>(
     builder.Configuration.GetValue<int>("DbConnections:Postgres:MaxRetry"),
     builder.Configuration.GetValue<int>("DbConnections:Postgres:MaxDelaySec")
 );
+
+builder.Services.AddKafkaConsumer<UserDeletedMessage>(builder.Configuration);
+builder.Services.AddHostedService<UserDeletedKafkaConsumerWorker>();
 
 builder.Services.Configure<MinioOptions>(builder.Configuration.GetSection("Minio"));
 builder.Services.AddScoped<IFileService, FileService>();
