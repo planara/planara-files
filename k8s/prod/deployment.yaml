@@ -42,6 +42,12 @@ spec:
                 secretKeyRef:
                   name: planara-common-secrets
                   key: DbConnections__Postgres__ConnectionString
+                  
+            - name: Kafka__BootstrapServers
+                valueFrom:
+                  secretKeyRef:
+                    name: planara-common-secrets
+                    key: Kafka__BootstrapServers
 
             - name: Jwt__Issuer
               value: "planara-auth"
@@ -75,6 +81,12 @@ spec:
 
             - name: Minio__UseSsl
               value: "false"
+              
+            - name: Kafka__ConsumerTopics__UserDeleted
+              value: "UserDeleted"
+
+            - name: Kafka__ConsumerGroupId
+              value: "svc-files"
 
           readinessProbe:
             tcpSocket:
