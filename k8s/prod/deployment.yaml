@@ -44,10 +44,10 @@ spec:
                   key: DbConnections__Postgres__ConnectionString
                   
             - name: Kafka__BootstrapServers
-                valueFrom:
-                  secretKeyRef:
-                    name: planara-common-secrets
-                    key: Kafka__BootstrapServers
+              valueFrom:
+                secretKeyRef:
+                  name: planara-common-secrets
+                  key: Kafka__BootstrapServers
 
             - name: Jwt__Issuer
               value: "planara-auth"
